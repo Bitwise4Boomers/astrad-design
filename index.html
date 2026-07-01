@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ASTRAD — ARIES ST Radar Working Design</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap');
+
+  :root{
+    --bg:        #14181b;
+    --bg2:       #1b2024;
+    --panel:     #1d2226;
+    --panel2:    #232a2f;
+    --line:      #2d3539;
+    --line-lit:  #3a4448;
+    --text:      #d7dde0;
+    --text-dim:  #8b969b;
+    --text-faint:#5b6569;
+
+    --signal:    #5fd99f;
+    --signal-dim:#2c5c47;
+    --power:     #e8a33d;
+    --power-dim: #5c4220;
+    --fault:     #d8584a;
+    --fault-dim: #5c2c26;
+    --idle:      #5b7a8c;
+    --idle-dim:  #2e3c44;
+    --accent:    #7fb8d9;
+
+    --mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+    --sans: 'Inter', -apple-system, sans-serif;
+  }
+
+  *{ box-sizing:border-box; margin:0; padding:0; }
+
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    line-height:1.5;
+    min-height:100vh;
+    padding-bottom:80px;
+  }
+
+  .wrap{ max-width:980px; margin:0 auto; padding:0 20px; }
+
+  /* ===== Header / status strip ===== */
+  header{
+    position:sticky; top:0; z-index:50;
+    background:rgba(20,24,27,0.96);
+    backdrop-filter:blur(8px);
+    border-bottom:1px solid var(--line);
+  }
+  .header-inner{
+    max-width:980px; margin:0 auto; padding:14px 20px;
+    display:flex; align-items:center; justify-content:space-between; gap:16px;
+    flex-wrap:wrap;
+  }
+  .brand{ display:flex; align-items:baseline; gap:10px; }
+  .brand-mark{
+    font-family:var(--mono); font-size:11px; letter-spacing:0.12em;
+    color:var(--signal); border:1px solid var(--signal-dim);
+    padding:3px 7px; border-radius:3px; background:rgba(95,217,159,0.06);
+  }
+  .brand h1{ font-size:15px; font-weight:600; letter-spacing:0.01em; }
+  .brand .sub{ font-family:var(--mono); font-size:11px; color:var(--text-faint); }
+
+  .status-strip{ display:flex; gap:18px; font-family:var(--mono); font-size:11px; flex-wrap:wrap; }
+  .stat{ display:flex; align-items:center; gap:6px; color:var(--text-dim); }
+  .dot{ width:7px; height:7px; border-radius:50%; background:var(--text-faint); transition:background .3s, box-shadow .3s; }
+  .dot.on{ background:var(--signal); box-shadow:0 0 6px var(--signal); }
+  .dot.warn{ background:var(--power); box-shadow:0 0 6px var(--power); }
+  .dot.fault{ background:var(--fault); box-shadow:0 0 6px var(--fault); animation:blink 1s steps(2) infinite; }
+  @keyframes blink{ 50%{ opacity:0.35; } }
+
+  /* ===== Section scaffolding ===== */
+  .eyebrow{
+    font-family:var(--mono); font-size:11px; letter-spacing:0.1em; text-transform:uppercase;
+    color:var(--text-faint); margin:48px 0 6px;
+  }
+  h2{ font-size:18px; font-weight:600; margin-bottom:4px; }
+  .section-desc{ color:var(--text-dim); font-size:13.5px; max-width:640px; margin-bottom:18px; }
+
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:20px;
+  }
+  .panel + .panel{ margin-top:14px; }
+
+  .row{ display:flex; gap:14px; flex-wrap:wrap; }
+  .col{ flex:1; min-width:0; }
+
+  .module-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(140px,1fr)); gap:10px; }
+
+  .chip{
+    font-family:var(--mono); font-size:10.5px; letter-spacing:0.04em;
+    color:var(--text-dim); background:var(--bg2);
+    border:1px solid var(--line); border-radius:4px;
+    padding:2px 7px; display:inline-block;
+  }
+
+  button{
+    font-family:var(--sans); font-size:13px; font-weight:500;
+    background:var(--panel2); color:var(--text);
+    border:1px solid var(--line-lit); border-radius:6px;
+    padding:8px 14px; cursor:pointer;
+    transition:background .15s, border-color .15s, color .15s;
+  }
+  button:hover{ background:#2a3136; border-color:var(--text-faint); }
+  button:focus-visible{ outline:2px solid var(--accent); outline-offset:1px; }
+  button.active{ background:rgba(95,217,159,0.1); border-color:var(--signal-dim); color:var(--signal); }
+  button.danger.active{ background:rgba(216,88,74,0.12); border-color:var(--fault-dim); color:var(--fault); }
+
+  label{ font-size:12.5px; color:var(--text-dim); display:block; margin-bottom:5px; }
+  input[type=range]{
+    width:100%; accent-color:var(--signal); height:4px;
+  }
+  input[type=number]{
+    width:100%; background:var(--bg2); border:1px solid var(--line);
+    color:var(--text); font-family:var(--mono); font-size:13px;
+    padding:7px 9px; border-radius:5px;
+  }
+  input[type=number]:focus-visible{ outline:2px solid var(--accent); outline-offset:1px; }
+
+  .readout{
+    font-family:var(--mono); font-size:22px; font-weight:500; color:var(--signal);
+  }
+  .readout-label{ font-size:11px; color:var(--text-faint); margin-top:2px; }
+
+  .legend{ display:flex; gap:16px; flex-wrap:wrap; font-size:11.5px; color:var(--text-dim); margin-top:10px; }
+  .legend-item{ display:flex; align-items:center; gap:6px; }
+  .legend-swatch{ width:14px; height:3px; border-radius:2px; }
+
+  footer{
+    margin-top:60px; padding-top:20px; border-top:1px solid var(--line);
+    font-size:11.5px; color:var(--text-faint);
+  }
+  footer a{ color:var(--idle); text-decoration:none; }
+  footer a:hover{ text-decoration:underline; }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ animation-duration:0.01ms !important; animation-iteration-count:1 !important; transition-duration:0.01ms !important; }
+  }
+
+  @media (max-width:600px){
+    .status-strip{ font-size:10px; gap:12px; }
+    .readout{ font-size:18px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="brand">
+      <span class="brand-mark">ASTRAD</span>
+      <div>
+        <h1>ARIES ST Radar — working design</h1>
+        <div class="sub">206.5 MHz active phased array · Nainital, Uttarakhand</div>
+      </div>
+    </div>
+    <div class="status-strip" id="statusStrip">
+      <span class="stat"><span class="dot" id="dotMains"></span>MAINS</span>
+      <span class="stat"><span class="dot" id="dotUps"></span>UPS</span>
+      <span class="stat"><span class="dot" id="dotTrm"></span>TRM ARRAY</span>
+      <span class="stat"><span class="dot" id="dotDsp"></span>DSP</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- ============ SIGNAL CHAIN ============ -->
+  <div class="eyebrow">Signal chain — 01</div>
+  <h2>Antenna array → TRM bank → RF/timing core</h2>
+  <p class="section-desc">588 three-element Yagis in 12 clusters of 49, each wired to its own transmit/receive module. Click a TRM to step it through its three operating modes; the signal path animates live below.</p>
+
+  <div class="panel">
+    <svg id="signalSvg" width="100%" viewBox="0 0 940 300" role="img" aria-label="Animated signal flow from antenna array through TRM bank to RF timing core">
+      <defs>
+        <marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+      </defs>
+
+      <!-- Antenna array -->
+      <rect x="20" y="20" width="150" height="260" rx="10" fill="#1d2226" stroke="#2d3539" stroke-width="1"/>
+      <text x="95" y="42" text-anchor="middle" fill="#8b969b" font-family="JetBrains Mono" font-size="10.5">ANTENNA ARRAY</text>
+      <g id="antElements"></g>
+
+      <!-- TRM bank -->
+      <rect x="220" y="20" width="280" height="260" rx="10" fill="#1d2226" stroke="#2d3539" stroke-width="1"/>
+      <text x="360" y="42" text-anchor="middle" fill="#8b969b" font-family="JetBrains Mono" font-size="10.5">TRM BANK (588)</text>
+      <g id="trmElements"></g>
+
+      <!-- RF / timing core -->
+      <rect x="560" y="100" width="180" height="100" rx="10" fill="#1d2226" stroke="#2d3539" stroke-width="1"/>
+      <text x="650" y="125" text-anchor="middle" fill="#d7dde0" font-family="JetBrains Mono" font-size="11" font-weight="600">OCXO + CSG</text>
+      <text x="650" y="142" text-anchor="middle" fill="#5b6569" font-family="JetBrains Mono" font-size="9.5">206.5 MHz ref</text>
+      <circle id="csgPulse" cx="650" cy="165" r="5" fill="#7fb8d9"/>
+
+      <!-- Digital receiver -->
+      <rect x="780" y="100" width="140" height="100" rx="10" fill="#1d2226" stroke="#2d3539" stroke-width="1"/>
+      <text x="850" y="130" text-anchor="middle" fill="#d7dde0" font-family="JetBrains Mono" font-size="11" font-weight="600">DIGITAL RX</text>
+      <text x="850" y="148" text-anchor="middle" fill="#5b6569" font-family="JetBrains Mono" font-size="9.5">ADC · FFT</text>
+      <rect x="800" y="160" width="100" height="6" rx="3" fill="#2d3539"/>
+      <rect id="dspBar" x="800" y="160" width="0" height="6" rx="3" fill="#5fd99f"/>
+
+      <!-- connecting lines -->
+      <line x1="170" y1="150" x2="220" y2="150" stroke="#3a4448" stroke-width="1.5" marker-end="url(#ah)"/>
+      <line x1="500" y1="150" x2="560" y2="150" stroke="#3a4448" stroke-width="1.5" marker-end="url(#ah)"/>
+      <line x1="650" y1="100" x2="650" y2="65" stroke="#3a4448" stroke-width="1"/>
+      <line x1="650" y1="65" x2="360" y2="65" stroke="#3a4448" stroke-width="1"/>
+      <line x1="360" y1="65" x2="360" y2="20" stroke="#3a4448" stroke-width="1" marker-end="url(#ah)"/>
+      <text x="505" y="88" text-anchor="middle" fill="#5b6569" font-family="JetBrains Mono" font-size="9">carrier + timing fanout</text>
+      <line x1="740" y1="150" x2="780" y2="150" stroke="#3a4448" stroke-width="1.5" marker-end="url(#ah)"/>
+
+      <g id="flowDots"></g>
+    </svg>
+
+    <div class="legend">
+      <div class="legend-item"><span class="legend-swatch" style="background:#5fd99f"></span>active transmit/receive</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:#7fb8d9"></span>timing/carrier reference</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:#5b7a8c"></span>idle</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:#d8584a"></span>fault / unpowered</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="row" style="align-items:center; justify-content:space-between;">
+      <div>
+        <label style="margin-bottom:0;">TRM bank mode (click any TRM tile to cycle, or set all)</label>
+      </div>
+      <div class="row" style="gap:8px;">
+        <button id="btnModeDefault" class="active">Default (Tx/Rx)</button>
+        <button id="btnModeRxOnly">Receive only</button>
+        <button id="btnModeIdle">Idle</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ TRM INTERNALS ============ -->
+  <div class="eyebrow">Signal chain — 02</div>
+  <h2>Inside one TRM</h2>
+  <p class="section-desc">Every cluster element carries an identical TRM. The active path lights up according to the selected mode above.</p>
+
+  <div class="panel">
+    <svg id="trmInternalSvg" width="100%" viewBox="0 0 900 230" role="img" aria-label="Internal block diagram of one transmit receive module with active path highlighted by mode">
+      <defs>
+        <marker id="ah2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+      </defs>
+      <!-- Transmit row -->
+      <text x="20" y="28" fill="#8b969b" font-family="JetBrains Mono" font-size="10.5">TRANSMIT</text>
+      <g id="txChain"></g>
+      <!-- Receive row -->
+      <text x="20" y="138" fill="#8b969b" font-family="JetBrains Mono" font-size="10.5">RECEIVE</text>
+      <g id="rxChain"></g>
+      <!-- TCSG -->
+      <rect x="20" y="185" width="860" height="34" rx="6" fill="#1d2226" stroke="#2d3539" stroke-width="1"/>
+      <text x="450" y="206" text-anchor="middle" fill="#5b6569" font-family="JetBrains Mono" font-size="10">TIMING CONTROL SIGNAL GENERATOR — sequences Tx/Rx switching per pulse</text>
+    </svg>
+    <div style="margin-top:10px; font-family:var(--mono); font-size:11.5px; color:var(--text-dim);" id="trmModeReadout">Mode: DEFAULT — full transmit and receive path active</div>
+  </div>
+
+  <!-- ============ POWER CHAIN ============ -->
+  <div class="eyebrow">Power chain — 03</div>
+  <h2>Substation → UPS room → modules</h2>
+  <p class="section-desc">Toggle the mains supply to see the UPS take over: rectifier/charger drops off, the battery bank discharges through the inverter, and the static bypass disengages. DG set picks up if the outage runs long.</p>
+
+  <div class="panel">
+    <div class="row" style="margin-bottom:14px; gap:8px;">
+      <button id="btnMainsOk" class="active">Mains healthy</button>
+      <button id="btnMainsFail" class="danger">Simulate mains fail</button>
+    </div>
+
+    <svg id="powerSvg" width="100%" viewBox="0 0 940 360" role="img" aria-label="Animated power flow from substation through UPS to radar modules with mains fail simulation">
+      <defs>
+        <marker id="ahp" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+      </defs>
+
+      <!-- Substation -->
+      <rect x="20" y="20" width="170" height="60" rx="8" fill="#1d2226" stroke="#2d3539" stroke-width="1"/>
+      <text x="105" y="45" text-anchor="middle" fill="#d7dde0" font-family="JetBrains Mono" font-size="11" font-weight="600">SUBSTATION</text>
+      <text x="105" y="62" text-anchor="middle" fill="#5b6569" font-family="JetBrains Mono" font-size="9.5">11kV / 415V 3-phase</text>
+
+      <!-- DG set -->
+      <rect x="20" y="120" width="170" height="60" rx="8" fill="#1d2226" stroke="#2d3539" stroke-width="1"/>
+      <text x="105" y="145" text-anchor="middle" fill="#d7dde0" font-family="JetBrains Mono" font-size="11" font-weight="600">STANDBY DG SET</text>
+      <text x="105" y="162" text-anchor="middle" fill="#5b6569" font-family="JetBrains Mono" font-size="9.5">auto-start on fail</text>
+
+      <!-- ACDB -->
+      <rect x="250" y="65" width="150" height="60" rx="8" fill="#1d2226" stroke="#2d3539" stroke-width="1"/>
+      <text x="325" y="90" text-anchor="middle" fill="#d7dde0" font-family="JetBrains Mono" font-size="11" font-weight="600">MAIN LT / ACDB</text>
+      <text x="325" y="107" text-anchor="middle" fill="#5b6569" font-family="JetBrains Mono" font-size="9.5">isolators, MCCBs</text>
+
+      <!-- UPS room -->
+      <rect x="450" y="20" width="300" height="180" rx="10" fill="#1d2226" stroke="#2d3539" stroke-width="1"/>
+      <text x="600" y="42" text-anchor="middle" fill="#8b969b" font-family="JetBrains Mono" font-size="10.5">UPS ROOM</text>
+
+      <rect x="470" y="60" width="110" height="50" rx="6" id="rectBox" fill="#232a2f" stroke="#2d3539" stroke-width="1"/>
+      <text x="525" y="80" text-anchor="middle" fill="#d7dde0" font-family="JetBrains Mono" font-size="10">RECTIFIER /</text>
+      <text x="525" y="93" text-anchor="middle" fill="#d7dde0" font-family="JetBrains Mono" font-size="10">CHARGER</text>
+
+      <rect x="470" y="130" width="110" height="50" rx="6" id="battBox" fill="#232a2f" stroke="#2d3539" stroke-width="1"/>
+      <text x="525" y="150" text-anchor="middle" fill="#d7dde0" font-family="JetBrains Mono" font-size="10">BATTERY</text>
+      <text x="525" y="163" text-anchor="middle" fill="#d7dde0" font-family="JetBrains Mono" font-size="10">BANK</text>
+      <rect x="490" y="168" width="70" height="6" rx="3" fill="#2d3539"/>
+      <rect id="battLevel" x="490" y="168" width="70" height="6" rx="3" fill="#5fd99f"/>
+
+      <rect x="620" y="95" width="110" height="50" rx="6" id="invBox" fill="#232a2f" stroke="#2d3539" stroke-width="1"/>
+      <text x="675" y="115" text-anchor="middle" fill="#d7dde0" font-family="JetBrains Mono" font-size="10">INVERTER /</text>
+      <text x="675" y="128" text-anchor="middle" fill="#d7dde0" font-family="JetBrains Mono" font-size="10">BYPASS</text>
+
+      <line x1="580" y1="85" x2="620" y2="115" id="rectInvLine" stroke="#3a4448" stroke-width="1.5" marker-end="url(#ahp)"/>
+      <line x1="580" y1="155" x2="620" y2="125" id="battInvLine" stroke="#3a4448" stroke-width="1.5" marker-end="url(#ahp)"/>
+      <line x1="400" y1="95" x2="470" y2="85" stroke="#3a4448" stroke-width="1.5" marker-end="url(#ahp)"/>
+      <line x1="190" y1="50" x2="250" y2="80" stroke="#3a4448" stroke-width="1.5" marker-end="url(#ahp)"/>
+      <line x1="190" y1="150" x2="250" y2="105" id="dgLine" stroke="#3a4448" stroke-width="1.5" marker-end="url(#ahp)"/>
+
+      <!-- DC distribution -->
+      <rect x="450" y="250" width="460" height="90" rx="10" fill="#1d2226" stroke="#2d3539" stroke-width="1"/>
+      <text x="680" y="272" text-anchor="middle" fill="#8b969b" font-family="JetBrains Mono" font-size="10.5">DC / AC DISTRIBUTION</text>
+      <rect x="470" y="285" width="130" height="40" rx="6" fill="#232a2f" stroke="#2d3539" stroke-width="1"/>
+      <text x="535" y="309" text-anchor="middle" fill="#d7dde0" font-family="JetBrains Mono" font-size="9.5">+28V/+12V → TRMs</text>
+      <rect x="615" y="285" width="130" height="40" rx="6" fill="#232a2f" stroke="#2d3539" stroke-width="1"/>
+      <text x="680" y="309" text-anchor="middle" fill="#d7dde0" font-family="JetBrains Mono" font-size="9.5">DC → OCXO/CSG</text>
+      <rect x="760" y="285" width="130" height="40" rx="6" fill="#232a2f" stroke="#2d3539" stroke-width="1"/>
+      <text x="825" y="309" text-anchor="middle" fill="#d7dde0" font-family="JetBrains Mono" font-size="9.5">AC/DC → DSP rack</text>
+
+      <line x1="675" y1="145" x2="675" y2="250" stroke="#3a4448" stroke-width="1.5" marker-end="url(#ahp)"/>
+
+      <g id="powerFlowDots"></g>
+    </svg>
+
+    <div style="margin-top:6px; font-family:var(--mono); font-size:11.5px;" id="powerReadout">
+      <span id="powerStateText" style="color:#5fd99f;">MAINS HEALTHY — UPS on bypass, battery on float charge</span>
+    </div>
+  </div>
+
+  <!-- ============ CALCULATOR ============ -->
+  <div class="eyebrow">Parameter calculator — 04</div>
+  <h2>Radar link budget</h2>
+  <p class="section-desc">Standard pulsed monostatic radar relations applied to ASTRAD's published parameters. Edit any field — outputs recompute live. Defaults reflect ASTRAD's documented specification (206.5 MHz, ~200&nbsp;W/element).</p>
+
+  <div class="panel">
+    <div class="row">
+      <div class="col">
+        <label for="inFreq">Operating frequency (MHz)</label>
+        <input type="number" id="inFreq" value="206.5" step="0.1">
+      </div>
+      <div class="col">
+        <label for="inPtx">Tx power per element (W)</label>
+        <input type="number" id="inPtx" value="200" step="1">
+      </div>
+      <div class="col">
+        <label for="inN">Active elements</label>
+        <input type="number" id="inN" value="588" step="1">
+      </div>
+    </div>
+    <div class="row" style="margin-top:12px;">
+      <div class="col">
+        <label for="inPulse">Pulse width (µs)</label>
+        <input type="number" id="inPulse" value="8" step="0.5">
+      </div>
+      <div class="col">
+        <label for="inPrf">Pulse repetition frequency (Hz)</label>
+        <input type="number" id="inPrf" value="5000" step="100">
+      </div>
+      <div class="col">
+        <label for="inTrx">Receiver noise temp (K)</label>
+        <input type="number" id="inTrx" value="695" step="5">
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:22px; gap:24px;">
+      <div class="col">
+        <div class="readout" id="outErp">—</div>
+        <div class="readout-label">effective radiated power (dBW), array combined</div>
+      </div>
+      <div class="col">
+        <div class="readout" id="outWavelength">—</div>
+        <div class="readout-label">wavelength (m)</div>
+      </div>
+      <div class="col">
+        <div class="readout" id="outDuty">—</div>
+        <div class="readout-label">duty cycle</div>
+      </div>
+      <div class="col">
+        <div class="readout" id="outRangeRes">—</div>
+        <div class="readout-label">range resolution (m), uncoded pulse</div>
+      </div>
+    </div>
+    <div class="row" style="margin-top:18px; gap:24px;">
+      <div class="col">
+        <div class="readout" id="outRmax">—</div>
+        <div class="readout-label">unambiguous max range (km), from PRF</div>
+      </div>
+      <div class="col">
+        <div class="readout" id="outAvgPower">—</div>
+        <div class="readout-label">average Tx power, full array (kW)</div>
+      </div>
+    </div>
+    <p style="font-size:11.5px; color:var(--text-faint); margin-top:16px;">
+      ERP combines per-element power coherently across active elements (10·log10(N·P) referenced to 1W); it excludes individual element antenna gain, which is not published for ASTRAD. Range resolution = c·τ/2 (uncoded); ASTRAD's actual coded pulses (e.g. 8 µs complementary code, 0.25 µs baud) achieve finer resolution than the uncoded value shown. Unambiguous range = c / (2·PRF).
+    </p>
+  </div>
+
+  <footer>
+    Architecture reference: Bhattacharjee et al. (2022), "ARIES ST Radar: The first Central Himalayan wind profiler," <em>Journal of Astronomical Instrumentation</em> 11(4), 2240005. Power chain is a generic facility design, not a published ASTRAD as-built spec. Animation and calculator are illustrative; component values are representative, not the manufacturer's actual figures.
+  </footer>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ============================================================
+     1. TRM BANK — generate tiles, mode state machine
+     ============================================================ */
+  var NUM_TRM_DISPLAY = 24; // visual sample of the 588; behavior is uniform across the bank
+  var MODES = ["default","rxonly","idle"];
+  var MODE_LABELS = {
+    default: "Mode: DEFAULT — full transmit and receive path active",
+    rxonly:  "Mode: RECEIVE ONLY — transmit path gated off, receive path active",
+    idle:    "Mode: IDLE — TRM unpowered from RF path, TCSG holds module in standby"
+  };
+  var MODE_COLOR = { default:"#5fd99f", rxonly:"#7fb8d9", idle:"#5b7a8c" };
+
+  var trmState = [];
+  for (var i=0;i<NUM_TRM_DISPLAY;i++){ trmState.push("default"); }
+
+  var antNS = document.getElementById("antElements");
+  var trmNS = document.getElementById("trmElements");
+
+  var cols = 4, rows = 6;
+  var antCellW = 28, antCellH = 36, antGapX = 6, antGapY = 4;
+  var trmCellW = 56, trmCellH = 36, trmGapX = 8, trmGapY = 4;
+
+  function buildTiles(){
+    antNS.innerHTML = "";
+    trmNS.innerHTML = "";
+    for (var i=0;i<NUM_TRM_DISPLAY;i++){
+      var r = Math.floor(i/cols), c = i%cols;
+
+      // antenna tile
+      var ax = 35 + c*(antCellW+antGapX);
+      var ay = 55 + r*(antCellH+antGapY);
+      var aRect = document.createElementNS("http://www.w3.org/2000/svg","rect");
+      aRect.setAttribute("x",ax); aRect.setAttribute("y",ay);
+      aRect.setAttribute("width",antCellW); aRect.setAttribute("height",antCellH-8);
+      aRect.setAttribute("rx",3);
+      aRect.setAttribute("fill","#232a2f");
+      aRect.setAttribute("stroke","#2d3539");
+      aRect.setAttribute("stroke-width","1");
+      aRect.setAttribute("data-idx",i);
+      aRect.setAttribute("class","ant-tile");
+      antNS.appendChild(aRect);
+
+      // TRM tile (clickable)
+      var tx = 240 + c*(trmCellW+trmGapX);
+      var ty = 55 + r*(trmCellH+trmGapY);
+      var g = document.createElementNS("http://www.w3.org/2000/svg","g");
+      g.setAttribute("style","cursor:pointer");
+      g.setAttribute("tabindex","0");
+      g.setAttribute("role","button");
+      g.setAttribute("aria-label","TRM " + (i+1) + ", click to cycle mode");
+      var tRect = document.createElementNS("http://www.w3.org/2000/svg","rect");
+      tRect.setAttribute("x",tx); tRect.setAttribute("y",ty);
+      tRect.setAttribute("width",trmCellW); tRect.setAttribute("height",trmCellH-6);
+      tRect.setAttribute("rx",4);
+      tRect.setAttribute("fill","#232a2f");
+      tRect.setAttribute("stroke","#2d3539");
+      tRect.setAttribute("stroke-width","1");
+      tRect.setAttribute("data-idx",i);
+      tRect.setAttribute("class","trm-tile");
+      var tText = document.createElementNS("http://www.w3.org/2000/svg","text");
+      tText.setAttribute("x",tx+trmCellW/2); tText.setAttribute("y",ty+(trmCellH-6)/2);
+      tText.setAttribute("text-anchor","middle"); tText.setAttribute("dominant-baseline","central");
+      tText.setAttribute("font-family","JetBrains Mono"); tText.setAttribute("font-size","9");
+      tText.setAttribute("fill","#5b6569");
+      tText.textContent = "T"+(i+1);
+      g.appendChild(tRect); g.appendChild(tText);
+      g.addEventListener("click", (function(idx){ return function(){ cycleTrm(idx); }; })(i));
+      g.addEventListener("keydown", (function(idx){ return function(e){ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); cycleTrm(idx); } }; })(i));
+      trmNS.appendChild(g);
+    }
+    renderTrmColors();
+  }
+
+  function cycleTrm(idx){
+    var cur = trmState[idx];
+    var next = MODES[(MODES.indexOf(cur)+1) % MODES.length];
+    trmState[idx] = next;
+    renderTrmColors();
+    updateGlobalModeButtons();
+  }
+
+  function setAllTrm(mode){
+    for (var i=0;i<trmState.length;i++){ trmState[i]=mode; }
+    renderTrmColors();
+    updateGlobalModeButtons();
+    document.getElementById("trmModeReadout").textContent = MODE_LABELS[mode];
+    renderTrmInternal(mode);
+  }
+
+  function renderTrmColors(){
+    var tiles = trmNS.querySelectorAll(".trm-tile");
+    var antTiles = antNS.querySelectorAll(".ant-tile");
+    for (var i=0;i<tiles.length;i++){
+      var idx = parseInt(tiles[i].getAttribute("data-idx"),10);
+      var mode = trmState[idx];
+      var col = MODE_COLOR[mode];
+      tiles[i].setAttribute("stroke", col);
+      tiles[i].setAttribute("fill", mode==="idle" ? "#1d2226" : "rgba(95,217,159,0.06)");
+      if (antTiles[i]){
+        antTiles[i].setAttribute("stroke", mode==="idle" ? "#2d3539" : col);
+      }
+    }
+    // update DSP/CSG glow based on whether any TRM is active
+    var anyActive = trmState.some(function(m){ return m!=="idle"; });
+    document.getElementById("dotTrm").className = "dot " + (anyActive ? "on" : "");
+  }
+
+  function updateGlobalModeButtons(){
+    var allSame = trmState.every(function(m){ return m===trmState[0]; });
+    var mode = allSame ? trmState[0] : null;
+    document.getElementById("btnModeDefault").classList.toggle("active", mode==="default");
+    document.getElementById("btnModeRxOnly").classList.toggle("active", mode==="rxonly");
+    document.getElementById("btnModeIdle").classList.toggle("active", mode==="idle");
+  }
+
+  document.getElementById("btnModeDefault").addEventListener("click", function(){ setAllTrm("default"); });
+  document.getElementById("btnModeRxOnly").addEventListener("click", function(){ setAllTrm("rxonly"); });
+  document.getElementById("btnModeIdle").addEventListener("click", function(){ setAllTrm("idle"); });
+
+  buildTiles();
+
+  /* ============================================================
+     2. TRM INTERNAL CHAIN
+     ============================================================ */
+  var txStages = [
+    {label:"Phase shifter", w:110},
+    {label:"Driver amp", w:100},
+    {label:"HPA 200W", w:100},
+    {label:"T/R switch", w:100}
+  ];
+  var rxStages = [
+    {label:"Phase/comb.", w:110},
+    {label:"IF amp/filter", w:100},
+    {label:"Mixer/IF", w:100},
+    {label:"LNA", w:100}
+  ];
+
+  function buildChain(container, stages, y){
+    container.innerHTML = "";
+    var x = 20, gap = 18;
+    var boxes = [];
+    for (var i=0;i<stages.length;i++){
+      var rect = document.createElementNS("http://www.w3.org/2000/svg","rect");
+      rect.setAttribute("x",x); rect.setAttribute("y",y);
+      rect.setAttribute("width",stages[i].w); rect.setAttribute("height",44);
+      rect.setAttribute("rx",6);
+      rect.setAttribute("fill","#232a2f");
+      rect.setAttribute("stroke","#2d3539");
+      rect.setAttribute("stroke-width","1.2");
+      rect.setAttribute("class","chain-box");
+      container.appendChild(rect);
+      var text = document.createElementNS("http://www.w3.org/2000/svg","text");
+      text.setAttribute("x", x+stages[i].w/2); text.setAttribute("y", y+22);
+      text.setAttribute("text-anchor","middle"); text.setAttribute("dominant-baseline","central");
+      text.setAttribute("font-family","JetBrains Mono"); text.setAttribute("font-size","10");
+      text.setAttribute("fill","#d7dde0");
+      text.textContent = stages[i].label;
+      container.appendChild(text);
+      boxes.push(rect);
+      if (i < stages.length-1){
+        var line = document.createElementNS("http://www.w3.org/2000/svg","line");
+        line.setAttribute("x1", x+stages[i].w); line.setAttribute("y1", y+22);
+        line.setAttribute("x2", x+stages[i].w+gap); line.setAttribute("y2", y+22);
+        line.setAttribute("stroke","#3a4448"); line.setAttribute("stroke-width","1.5");
+        line.setAttribute("marker-end","url(#ah2)");
+        line.setAttribute("class","chain-line");
+        container.appendChild(line);
+      }
+      x += stages[i].w + gap;
+    }
+    return boxes;
+  }
+
+  buildChain(document.getElementById("txChain"), txStages, 40);
+  buildChain(document.getElementById("rxChain"), rxStages, 150);
+
+  function renderTrmInternal(mode){
+    var txActive = (mode === "default");
+    var rxActive = (mode === "default" || mode === "rxonly");
+    setChainState(document.getElementById("txChain"), txActive);
+    setChainState(document.getElementById("rxChain"), rxActive);
+  }
+
+  function setChainState(container, active){
+    var boxes = container.querySelectorAll(".chain-box");
+    var lines = container.querySelectorAll(".chain-line");
+    boxes.forEach(function(b){
+      b.setAttribute("stroke", active ? "#5fd99f" : "#2d3539");
+      b.setAttribute("fill", active ? "rgba(95,217,159,0.08)" : "#1d2226");
+    });
+    lines.forEach(function(l){ l.setAttribute("stroke", active ? "#5fd99f" : "#3a4448"); });
+  }
+
+  renderTrmInternal("default");
+
+  /* ============================================================
+     3. SIGNAL FLOW DOTS (ambient animation)
+     ============================================================ */
+  var flowGroup = document.getElementById("flowDots");
+  var flowDots = [];
+  function spawnFlowDot(){
+    var anyActive = trmState.some(function(m){ return m!=="idle"; });
+    if (!anyActive) return;
+    var dot = document.createElementNS("http://www.w3.org/2000/svg","circle");
+    dot.setAttribute("r","3");
+    dot.setAttribute("fill","#5fd99f");
+    dot.setAttribute("cx","170"); dot.setAttribute("cy", 150 + (Math.random()*40-20));
+    flowGroup.appendChild(dot);
+    var start = performance.now();
+    var dur = 1100;
+    function step(now){
+      var t = Math.min(1,(now-start)/dur);
+      var x = 170 + t*(780-170);
+      dot.setAttribute("cx", x);
+      dot.setAttribute("opacity", 1-t*0.3);
+      if (t<1){ requestAnimationFrame(step); } else { dot.remove(); }
+    }
+    requestAnimationFrame(step);
+  }
+  setInterval(spawnFlowDot, 450);
+
+  // CSG pulse + DSP bar ambient pulse
+  var dspBar = document.getElementById("dspBar");
+  var csgPulse = document.getElementById("csgPulse");
+  var dspPhase = 0;
+  setInterval(function(){
+    var anyActive = trmState.some(function(m){ return m!=="idle"; });
+    csgPulse.setAttribute("opacity", anyActive ? (0.4+0.6*Math.abs(Math.sin(dspPhase))) : 0.15);
+    dspPhase += 0.5;
+    if (anyActive){
+      var w = 20 + 70*Math.abs(Math.sin(dspPhase*0.7));
+      dspBar.setAttribute("width", w);
+    } else {
+      dspBar.setAttribute("width", 0);
+    }
+  }, 120);
+
+  /* ============================================================
+     4. POWER CHAIN STATE MACHINE
+     ============================================================ */
+  var mainsHealthy = true;
+  var battLevelPct = 100;
+  var battTimer = null;
+
+  var elRect = document.getElementById("rectBox");
+  var elBatt = document.getElementById("battBox");
+  var elInv  = document.getElementById("invBox");
+  var elBattLevel = document.getElementById("battLevel");
+  var elDgLine = document.getElementById("dgLine");
+  var elRectInvLine = document.getElementById("rectInvLine");
+  var elBattInvLine = document.getElementById("battInvLine");
+  var elPowerState = document.getElementById("powerStateText");
+
+  var dotMains = document.getElementById("dotMains");
+  var dotUps = document.getElementById("dotUps");
+  var dotDsp = document.getElementById("dotDsp");
+
+  function setBoxState(el, color){
+    el.setAttribute("stroke", color);
+    el.setAttribute("fill", color === "#2d3539" ? "#1d2226" : "rgba(0,0,0,0.0)");
+  }
+
+  function renderPowerChain(){
+    if (mainsHealthy){
+      setBoxState(elRect, "#5fd99f");
+      setBoxState(elInv, "#5fd99f");
+      elRectInvLine.setAttribute("stroke","#5fd99f");
+      elBattInvLine.setAttribute("stroke","#3a4448");
+      elDgLine.setAttribute("stroke","#3a4448");
+      dotMains.className = "dot on";
+      dotUps.className = "dot on";
+      dotDsp.className = "dot on";
+      elPowerState.textContent = "MAINS HEALTHY — UPS on bypass, battery on float charge";
+      elPowerState.style.color = "#5fd99f";
+      setBoxState(elBatt, battLevelPct < 20 ? "#d8584a" : "#2d3539");
+    } else {
+      setBoxState(elRect, "#2d3539");
+      setBoxState(elInv, "#e8a33d");
+      elRectInvLine.setAttribute("stroke","#2d3539");
+      elBattInvLine.setAttribute("stroke","#e8a33d");
+      dotMains.className = "dot fault";
+      dotUps.className = "dot warn";
+      dotDsp.className = battLevelPct > 5 ? "dot warn" : "dot fault";
+      if (battLevelPct > 5){
+        elPowerState.textContent = "MAINS FAIL — running on battery bank via inverter (" + Math.round(battLevelPct) + "% remaining)";
+        elPowerState.style.color = "#e8a33d";
+        setBoxState(elBatt, "#e8a33d");
+      } else {
+        elPowerState.textContent = "BATTERY DEPLETED — DG set auto-start engaged, restoring ACDB feed";
+        elPowerState.style.color = "#d8584a";
+        setBoxState(elBatt, "#d8584a");
+        elDgLine.setAttribute("stroke","#e8a33d");
+      }
+    }
+    elBattLevel.setAttribute("width", Math.max(0, 70*battLevelPct/100));
+    elBattLevel.setAttribute("fill", battLevelPct < 20 ? "#d8584a" : (mainsHealthy ? "#5fd99f" : "#e8a33d"));
+  }
+
+  function setMains(healthy){
+    mainsHealthy = healthy;
+    document.getElementById("btnMainsOk").classList.toggle("active", healthy);
+    document.getElementById("btnMainsFail").classList.toggle("active", !healthy);
+    if (battTimer) { clearInterval(battTimer); battTimer = null; }
+    if (!healthy){
+      battTimer = setInterval(function(){
+        battLevelPct = Math.max(0, battLevelPct - 4);
+        renderPowerChain();
+      }, 600);
+    } else {
+      battTimer = setInterval(function(){
+        battLevelPct = Math.min(100, battLevelPct + 6);
+        renderPowerChain();
+        if (battLevelPct >= 100) { clearInterval(battTimer); battTimer = null; }
+      }, 400);
+    }
+    renderPowerChain();
+  }
+
+  document.getElementById("btnMainsOk").addEventListener("click", function(){ setMains(true); });
+  document.getElementById("btnMainsFail").addEventListener("click", function(){ setMains(false); });
+
+  renderPowerChain();
+
+  // power flow dots along the active path
+  var pfGroup = document.getElementById("powerFlowDots");
+  function spawnPowerDot(){
+    var dot = document.createElementNS("http://www.w3.org/2000/svg","circle");
+    dot.setAttribute("r","3");
+    var color = mainsHealthy ? "#5fd99f" : "#e8a33d";
+    dot.setAttribute("fill", color);
+    var startX = mainsHealthy ? 525 : 525;
+    var startY = mainsHealthy ? 60 : 130;
+    dot.setAttribute("cx", startX); dot.setAttribute("cy", startY);
+    pfGroup.appendChild(dot);
+    var start = performance.now();
+    var dur = 1400;
+    function step(now){
+      var t = Math.min(1,(now-start)/dur);
+      var x, y;
+      if (t < 0.4){
+        var tt = t/0.4;
+        x = startX + tt*(675-startX);
+        y = startY + tt*(120-startY);
+      } else {
+        var tt2 = (t-0.4)/0.6;
+        x = 675;
+        y = 120 + tt2*(285-120);
+      }
+      dot.setAttribute("cx", x); dot.setAttribute("cy", y);
+      dot.setAttribute("opacity", 1-t*0.4);
+      if (t<1){ requestAnimationFrame(step); } else { dot.remove(); }
+    }
+    requestAnimationFrame(step);
+  }
+  setInterval(spawnPowerDot, 500);
+
+  /* ============================================================
+     5. RADAR LINK BUDGET CALCULATOR
+     ============================================================ */
+  var C = 299792458; // m/s
+
+  function calc(){
+    var freqMHz = parseFloat(document.getElementById("inFreq").value) || 0;
+    var ptx = parseFloat(document.getElementById("inPtx").value) || 0;
+    var n = parseFloat(document.getElementById("inN").value) || 0;
+    var pulseUs = parseFloat(document.getElementById("inPulse").value) || 0;
+    var prf = parseFloat(document.getElementById("inPrf").value) || 0;
+
+    var freqHz = freqMHz * 1e6;
+    var wavelength = freqHz > 0 ? C / freqHz : 0;
+    var totalPower = ptx * n;
+    var erpDbw = totalPower > 0 ? 10*Math.log10(totalPower) : -Infinity;
+    var dutyCycle = prf > 0 ? (pulseUs*1e-6) * prf : 0;
+    var rangeRes = C * (pulseUs*1e-6) / 2;
+    var rMax = prf > 0 ? (C / (2*prf)) / 1000 : 0;
+    var avgPower = totalPower * dutyCycle / 1000;
+
+    document.getElementById("outErp").textContent = isFinite(erpDbw) ? erpDbw.toFixed(1) : "—";
+    document.getElementById("outWavelength").textContent = wavelength.toFixed(3);
+    document.getElementById("outDuty").textContent = (dutyCycle*100).toFixed(2) + "%";
+    document.getElementById("outRangeRes").textContent = rangeRes.toFixed(1);
+    document.getElementById("outRmax").textContent = rMax.toFixed(1);
+    document.getElementById("outAvgPower").textContent = avgPower.toFixed(2);
+  }
+
+  ["inFreq","inPtx","inN","inPulse","inPrf","inTrx"].forEach(function(id){
+    document.getElementById(id).addEventListener("input", calc);
+  });
+  calc();
+
+})();
+</script>
+
+</body>
+</html>
